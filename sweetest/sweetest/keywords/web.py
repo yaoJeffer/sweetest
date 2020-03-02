@@ -1,4 +1,5 @@
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.common.exceptions import ElementClickInterceptedException
 from time import sleep
 import re
 from sweetest.globals import g
@@ -7,7 +8,7 @@ from sweetest.windows import w
 from sweetest.locator import locating_elements, locating_data, locating_element
 from sweetest.log import logger
 from sweetest.parse import data_format
-from sweetest.utility import check
+from sweetest.utility import compare, json2dict
 
 
 class Common():
@@ -15,31 +16,40 @@ class Common():
     def title(cls, data, output):
         logger.info('DATA:%s' % repr(data['text']))
         logger.info('REAL:%s' % repr(g.driver.title))
-        if data['text'].startswith('*'):
-            assert data['text'][1:] in g.driver.title
-        else:
-            assert data['text'] == g.driver.title
+        try:
+            if data['text'].startswith('*'):
+                assert data['text'][1:] in g.driver.title
+            else:
+                assert data['text'] == g.driver.title
+        except:
+            raise Exception(f'Check Failure, DATA:{data["text"]}, REAL:{g.driver.title}')
         # 只能获取到元素标题
         for key in output:
             g.var[key] = g.driver.title
+        return g.driver.title
+
 
     @classmethod
     def current_url(cls, data, output):
         logger.info('DATA:%s' % repr(data['text']))
         logger.info('REAL:%s' % repr(g.driver.current_url))
-        if data['text'].startswith('*'):
-            assert data['text'][1:] in g.driver.current_url
-        else:
-            assert data['text'] == g.driver.current_url
+        try:
+            if data['text'].startswith('*'):
+                assert data['text'][1:] in g.driver.current_url
+            else:
+                assert data['text'] == g.driver.current_url
+        except:
+            raise Exception(f'Check Failure, DATA:{data["text"]}, REAL:{g.driver.current_url}')            
         # 只能获取到元素 url
         for key in output:
             g.var[key] = g.driver.current_url
+        return g.driver.current_url
 
 
 def open(step):
     element = step['element']
-    el, value = e.get(element)
-    if step['data'].get('清理缓存', '') or step['data'].get('cookie', ''):
+    value = e.get(element)[1]
+    if step['data'].get('清理缓存', '') or step['data'].get('clear', ''):
         g.driver.delete_all_cookies()
     if step['data'].get('打开方式', '') == '新标签页' or step['data'].get('mode', '').lower() == 'tab':
         js = "window.open('%s')" % value
@@ -56,6 +66,11 @@ def open(step):
             w.init()
         g.driver.get(value)
         w.open(step)
+    cookie = step['data'].get('cookie', '')
+    if cookie:
+        g.driver.add_cookie(json2dict(cookie))
+        co = g.driver.get_cookie(json2dict(cookie).get('name', ''))
+        logger.info(f'cookie is add: {co}')
     sleep(0.5)
 
 
@@ -72,9 +87,10 @@ def check(step):
         e_name = element
     by = e.elements[e_name]['by']
     output = step['output']
+    var = {}
 
     if by in ('title', 'current_url'):
-        getattr(Common, by)(data, output)
+        var[by] = getattr(Common, by)(data, output)
 
     else:
         for key in data:
@@ -93,36 +109,27 @@ def check(step):
             if s:
                 real = eval('real' + s)
 
-            check(expected, real)
-            # logger.info('DATA:%s' % repr(expected))
-            # logger.info('REAL:%s' % repr(real))
-            # if isinstance(expected, str):
-            #     if expected.startswith('*'):
-            #         assert expected[1:] in real
-            #     else:
-            #         assert expected == real
-            # elif isinstance(expected, int):
-            #     real = str2int(real)
-            #     assert real == round(expected)
-            # elif isinstance(expected, float):
-            #     t, p1 = str2float(real)
-            #     d, p2 = str2float(expected)
-            #     p = min(p1, p2)
-            #     assert round(t, p) == round(d, p)
-            # elif expected is None:
-            #     assert real == ''
+            logger.info('DATA:%s' % repr(expected))
+            logger.info('REAL:%s' % repr(real))
+            try:
+                compare(expected, real)
+            except:
+                raise Exception(f'Check Failure, DATA:{repr(expected)}, REAL:{repr(real)}')
 
         # 获取元素其他属性
         for key in output:
             if output[key] == 'text':
-                g.var[key] = element_location.text
+                var[key] = g.var[key] = element_location.text
             elif output[key] in ('text…', 'text...'):
                 if element_location.text.endswith('...'):
-                    g.var[key] = element_location.text[:-3]
+                    var[key] = g.var[key] = element_location.text[:-3]
                 else:
-                    g.var[key] = element_location.text
+                    var[key] = g.var[key] = element_location.text
             else:
-                g.var[key] = element_location.get_attribute(output[key])
+                var[key] = g.var[key] = element_location.get_attribute(output[key])
+    if var:
+        step['_output'] += '||output=' + str(var)
+    return element_location
 
 
 def notcheck(step):
@@ -131,7 +138,7 @@ def notcheck(step):
         data = step['expected']
 
     element = step['element']
-    element_location = locating_element(element)
+    # element_location = locating_element(element)
 
     if e.elements[element]['by'] == 'title':
         assert data['text'] != g.driver.title
@@ -154,18 +161,38 @@ def input(step):
             elif element_location:
                 element_location.send_keys(data[key])
             sleep(0.5)
+        if key == 'word':  #逐字输入
+            for d in data[key]:
+                element_location.send_keys(d)
+                sleep(0.3)
+    return element_location
 
 
 def click(step):
     element = step['element']
+    data = step['data']
     if isinstance(element, str):
         element_location = locating_element(element, 'CLICK')
         if element_location:
-            element_location.click()
+            try:
+                element_location.click()
+            except ElementClickInterceptedException:  # 如果元素为不可点击状态，则等待1秒，再重试一次
+                sleep(1)
+                if data.get('mode'):
+                    g.driver.execute_script("arguments[0].click();", element_location)
+                else:
+                    element_location.click()
     elif isinstance(element, list):
         for _e in element:
             element_location = locating_element(_e, 'CLICK')
-            element_location.click()
+            try:
+                element_location.click()
+            except ElementClickInterceptedException:  # 如果元素为不可点击状态，则等待1秒，再重试一次
+                sleep(1)
+                if data.get('mode'):
+                    g.driver.execute_script("arguments[0].click();", element_location)
+                else:
+                    element_location.click()        
             sleep(0.5)
     sleep(0.5)
 
@@ -188,36 +215,44 @@ def click(step):
         if handle not in w.windows.values():
             w.register(step, handle)
 
+    return element_location
+
 
 def select(step):
     pass
 
 
-def move(step):
+def hover(step):
     actions = ActionChains(g.driver)
     element = step['element']
-    el = locating_element(element)
-    actions.move_to_element(el)
+    element_location = locating_element(element)
+    actions.move_to_element(element_location)
     actions.perform()
     sleep(0.5)
+
+    return element_location
 
 
 def context_click(step):
     actions = ActionChains(g.driver)
     element = step['element']
-    el = locating_element(element)
-    actions.context_click(el)
+    element_location = locating_element(element)
+    actions.context_click(element_location)
     actions.perform()
     sleep(0.5)
+
+    return element_location
 
 
 def double_click(step):
     actions = ActionChains(g.driver)
     element = step['element']
-    el = locating_element(element)
-    actions.double_click(el)
+    element_location = locating_element(element)
+    actions.double_click(element_location)
     actions.perform()
     sleep(0.5)
+
+    return element_location
 
 
 def drag_and_drop(step):
@@ -245,14 +280,15 @@ def swipe(step):
 
 def script(step):
     element = step['element']
-    el, value = e.get(element)
+    value = e.get(element)[1]
     g.driver.execute_script(value)
+
 
 def message(step):
     data = step['data']
     text = data.get('text', '')
     element = step['element']
-    el, value = e.get(element)
+    value = e.get(element)[1]
 
     if value.lower() in ('确认', 'accept'):
         g.driver.switch_to_alert().accept()
@@ -282,5 +318,40 @@ def upload(step):
     sleep(2)
 
 
-def refresh(step):
-    g.driver.refresh()
+def navigate(step):
+    element = step['element']
+
+    if element.lower() in ('刷新', 'refresh'):
+        g.driver.refresh()
+    elif element.lower() in ('前进', 'forward'):
+        g.driver.forward()
+    elif element.lower() in ('后退', 'back'):
+        g.driver.back()
+
+
+def scroll(step):
+    data = step['data']
+    x = data.get('x')
+    y = data.get('y') or data.get('text')
+
+    element = step['element']
+    if element == '':
+        # if x is None:
+        #     x = '0'
+        # g.driver.execute_script(
+        #     f"window.scrollTo({x},{y})")
+        if y:
+            g.driver.execute_script(
+                f"document.documentElement.scrollTop={y}")
+        if x:
+            g.driver.execute_script(
+                f"document.documentElement.scrollLeft={x}")         
+    else:
+        element_location = locating_element(element)
+
+        if y:
+            g.driver.execute_script(
+                f"arguments[0].scrollTop={y}", element_location)
+        if x:
+            g.driver.execute_script(
+                f"arguments[0].scrollLeft={x}", element_location)               

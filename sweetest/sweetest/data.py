@@ -34,16 +34,16 @@ def testsuite_format(data):
     }
     '''
     testsuite = []
-    testcase = {}
+    testcase = {'testsuite': '', 'no': 0}
     data = data2dict(data)
 
     for d in data:
         # 如果用例编号不为空，则为新的用例
         if d['id'].strip():
-            # 如果 testcase 非空，则添加到 testsuite 里，并重新初始化 testcase
-            if testcase:
+            # 如果 testcase[id] 非空，则添加到 testsuite 里，并重新初始化 testcase
+            if testcase.get('id'):
                 testsuite.append(testcase)
-                testcase = {}
+                testcase = {'testsuite': '', 'no': 0}
             for key in ('id', 'title', 'condition', 'designer', 'flag', 'result', 'remark'):
                 testcase[key] = d[key]
             testcase['priority'] = d['priority'] if d['priority'] else 'M'
@@ -65,9 +65,9 @@ def testsuite_format(data):
             step['_keyword'] = d['keyword']
             step['_element'] = d['element']
             step['_data'] = d['data']
-            step['vdata'] = d['data']
+            step['vdata'] = d.get('data', '')
             step['_expected'] = d.get('expected', '')
-            step['_output'] = d['output']
+            step['_output'] = d.get('output', '')
             testcase['steps'].append(step)
     if testcase:
         testsuite.append(testcase)
@@ -85,7 +85,7 @@ def testsuite2data(data):
     for d in data:
         s = d['steps'][0]  # 第一步和用例标题同一行
         testcase = [d['id'], d['title'], d['condition'], s['no'], s['_keyword'], s['page'], s['_element'],
-                s['vdata'], s['_output'], d['priority'], d['designer'], d['flag'], s['score'], d['result'], s['remark']]
+                    s['vdata'], s['_output'], d['priority'], d['designer'], d['flag'], s['score'], d['result'], s['remark']]
         if g.header_custom['expected']:
             testcase.insert(8, s['_expected'])
         result.append(testcase)
@@ -97,9 +97,16 @@ def testsuite2data(data):
             result.append(step)
     return result
 
+
 def testsuite2report(data):
     report = []
     for case in data:
-        if case['condition'] in ('BASE', 'SETUP', 'SNIPPET') or case['flag'] != 'N':
+        if case['condition'] in ('BASE', 'SETUP') or case['flag'] != 'N':
+            for step in case['steps']:
+                step['keyword'] = step.pop('_keyword')
+                step['element'] = step.pop('_element')
+                step['data'] = str(step.pop('vdata'))
+                step['expected'] = step.pop('_expected')
+                step['output'] = step.pop('_output')
             report.append(case)
     return report

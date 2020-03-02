@@ -47,7 +47,8 @@ class Windows:
                 logger.info('--- Switch Windows: %s' % repr(tw))
                 g.driver.switch_to_window(tw)
                 self.current_window = self.pages[page]
-                logger.info('--- Current Windows: %s' % repr(self.current_window))
+                logger.info('--- Current Windows: %s' %
+                            repr(self.current_window))
 
     def switch_frame(self, frame):
         if frame.strip():
@@ -62,7 +63,7 @@ class Windows:
                     elif '#' in f:
                         from sweetest.testcase import elements_format
                         from sweetest.locator import locating_element
-                        element = elements_format('通用',f)[2]
+                        element = elements_format('通用', f)[2]
                         f = locating_element(element)
                     logger.info('--- Switch Frame: %s' % repr(f))
                     g.driver.switch_to.frame(f)
@@ -123,12 +124,13 @@ class Windows:
             # 切换到每一个窗口,并关闭它
             g.driver.switch_to_window(handle)
             g.driver.close()
+            logger.info('--- Close th Windows: %s' % repr(handle))
 
     def switch_context(self, context):
         if context.strip() == '':
             context = 'NATIVE_APP'
-        logger.info('--- ALL   Contexts:%s' % g.driver.contexts)
-        logger.info('--- Input  Context:%s' % repr(context))
+        # logger.info('--- ALL   Contexts:%s' % g.driver.contexts)
+        # logger.info('--- Input  Context:%s' % repr(context))
         if context != self.current_context:
             if context == '':
                 context = None

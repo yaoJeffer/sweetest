@@ -5,9 +5,17 @@ import xlsxwriter
 import csv
 import re
 import json
+import time
+import random
 from sweetest.config import header
 from sweetest.globals import g
-from sweetest.lib import *
+
+
+path = Path('lib')
+if path.is_dir():
+    from lib import *
+else:
+    from sweetest.lib import *
 
 
 class Excel:
@@ -52,8 +60,6 @@ class Excel:
         sheet = self.workbook.add_worksheet(sheet_name)
 
         red = self.workbook.add_format({'bg_color': 'red', 'color': 'white'})
-        yellow = self.workbook.add_format(
-            {'bg_color': 'yellow', 'color': 'black'})
         gray = self.workbook.add_format({'bg_color': 'gray', 'color': 'white'})
         green = self.workbook.add_format(
             {'bg_color': 'green', 'color': 'white'})
@@ -62,18 +68,18 @@ class Excel:
             {'bg_color': 'orange', 'color': 'white'})
         for i in range(len(data)):
             for j in range(len(data[i])):
-                if str(data[i][j]) == 'Fail':
+                if str(data[i][j]) == 'failure':
                     sheet.write(i, j, str(data[i][j]), red)
                 elif str(data[i][j]) == 'NO':
                     sheet.write(i, j, str(data[i][j]), gray)
-                elif str(data[i][j]) == 'Block':
+                elif str(data[i][j]) == 'blocked':
                     sheet.write(i, j, str(data[i][j]), orange)
-                elif str(data[i][j]) == 'Skip':
+                elif str(data[i][j]) == 'skipped':
                     sheet.write(i, j, str(data[i][j]), blue)
-                elif str(data[i][j]) == 'Pass':
+                elif str(data[i][j]) == 'success':
                     sheet.write(i, j, str(data[i][j]), green)
                 else:
-                    sheet.write(i, j, str(data[i][j]))
+                    sheet.write(i, j, data[i][j])
 
     def close(self):
         self.workbook.close()
@@ -120,33 +126,46 @@ def replace_list(data):
         data[i] = replace(data[i])
 
 
-def replace(data):
+def replace_old(data):
     # 正则匹配出 data 中所有 <> 中的变量，返回列表
     keys = re.findall(r'<(.*?)>', data)
-    for i, k in enumerate(keys):
-        # 正则匹配出 k 中的 + - ** * // / % ( )，返回列表
-        values = re.split(r'(\+|-|\*\*|\*|//|/|%|\(|\))', k)
+    for k in keys:
+        # 正则匹配出 k 中的 + - ** * // / % , ( ) 返回列表
+        values = re.split(r'(\+|-|\*\*|\*|//|/|%|,|\(|\)|\'|\")', k)
         for j, v in enumerate(values):
-            # 切片操作处理，正则匹配出 [] 中内容
-            s = re.findall(r'\[.*?\]', v)
-            if s:
-                s = s[0]
-                v = v.replace(s, '')
+            #切片操作处理，正则匹配出 [] 中内容
+            s = v.split('[', 1)
+            index = ''
+            if len(s) == 2:
+                v = s[0]
+                index = '[' + s[1]
 
             if v in g.var:
-                # 如果在 g.var 中是 list，则 pop 第一个值
+                # 如果在 g.var 中是 list
                 if isinstance(g.var[v], list):
-                    values[j] = g.var[k].pop(0)
-                    if s:
-                        values[j] = eval('values[j]' + s)
-                    # 再判断一下此 list 是否只有一个值了，如果是，则从 list 变为该值
-                    if len(g.var[v]) == 1:
-                        g.var[v] = g.var[v][0]
-                # 如果在 g.var 中是值，则直接赋值
+                    if index:
+                        # list 切片取值（值应该是动态赋值的变量，如自定义脚本的返回值）
+                        values[j] = eval('g.var[v]' + index)
+                    else:
+                        if len(g.var[v]) == 1:
+                            values[j] = g.var[v][0]
+                            g.var['_last_'] = True
+                        else:
+                            values[j] = g.var[v].pop(0)
+                elif isinstance(g.var[v], dict) and index:
+                    # 如果是 dict 取键值
+                    values[j] = eval('g.var[v]' + index)
                 else:
+                    # 如果在 g.var 中是值，则直接赋值
                     values[j] = g.var[v]
-                    if s:
-                        values[j] = eval('values[j]' + s)
+                    if index:
+                        values[j] = eval('g.var[v]' + index)
+            # 如果值不在 g.var，且只有一个元素，则尝试 eval，比如<False>,<True>,<1>,<9.999>
+            elif len(values) == 1:
+                try:
+                    values[j] = eval(values[j])
+                except:
+                    pass
 
         # 如果 values 长度大于 1，说明有算术运算符，则用 eval 运算
         # 注意，先要把元素中的数字变为字符串
@@ -164,6 +183,55 @@ def replace(data):
         # 否则需要替换，此时变量强制转换为为字符串
         else:
             data = data.replace('<' + k + '>', str(values))
+    return data
+
+
+def replace(data):
+    left_angle = 'dsfw4rwfdfstg43'
+    right_angle = '3dsdtgsgt43trfdf'
+    data = data.replace('\<', left_angle).replace('\>', right_angle)
+    # 正则匹配出 data 中所有 <> 中的变量，返回列表
+    keys = re.findall(r'<(.*?)>', data)
+    _vars = {}
+
+    for k in keys:
+        k = k.replace(left_angle, '<').replace(right_angle, '>')
+        # 正则匹配出 k 中的 + - ** * // / % , ( ) 返回列表
+        values = re.split(r'(\+|-|\*\*|\*|//|/|%|,|\(|\))', k)
+        for v in values:
+            #切片操作处理，正则匹配出 [] 中内容
+            s = v.split('[', 1)
+            index = ''
+            if len(s) == 2:
+                v = s[0]
+                index = '[' + s[1]
+
+            if v in g.var and v not in _vars:
+                # 如果在 var 中是 list
+                if isinstance(g.var[v], list) and not index:
+                    # 是测试数据文件中的值，则 pop 第一个值
+                    if len(g.var[v]) == 0:
+                        raise Exception('The key:%s is no value in data csv' %v)
+                    elif len(g.var[v]) == 1:
+                        _vars[v] = g.var[v][0]
+                        g.var['_last_'] = True
+                    else:
+                        _vars[v] = g.var[v].pop(0)
+
+                else:
+                    _vars[v] = g.var[v]
+
+        try:
+            value = eval(k, globals(), _vars)              
+        except:
+            value = '<' + k + '>'             
+        
+        if data == '<' + keys[0] + '>':
+            data = value
+        # 否则需要替换，此时变量强制转换为为字符串
+        else:
+            data = data.replace('<' + k + '>', str(value))
+            data = data.replace(left_angle, '<').replace(right_angle, '>')
     return data
 
 
@@ -198,10 +266,10 @@ def get_record(data_file):
     except:
         data = read_csv(data_file)
 
-    record = {}
-    if data[0][-1].lower() != 'flag':
-        for d in data[1:]:
-            for i in range(len(data[0])):
+    def read_data():
+        num = len(data[0])-1 if flag else len(data[0])
+        for i in range(num):
+            if d[i]:
                 k = data[0][i]
                 if record.get(k, None):
                     if isinstance(record[k], str):
@@ -209,26 +277,29 @@ def get_record(data_file):
                     record[k].append(d[i])
                 else:
                     record[k] = d[i]
+                if record[k][-1] == '&quot;':  # 空字符转换
+                    record[k][-1] = ''
 
-    else:
-        for d in data[1:]:
-            if d[-1] != 'Y':
-                for i in range(len(data[0][:-1])):
-                    k = data[0][i]
-                    if record.get(k, None):
-                        if isinstance(record[k], str):
-                            record[k] = [record[k]]
-                        record[k].append(d[i])
-                    else:
-                        record[k] = d[i]
-                d[-1] = 'Y'
-                write_csv(data_file, data, encoding=encoding)
-                break
+    record = {}
+    flag = False
+    if data[0][-1].lower() == 'flag':
+        flag = True
+
+    for d in data[1:]:
+        if not flag:
+            read_data()
+        elif d[-1] == 'N':
+            read_data()    
+        elif d[-1] != 'Y':
+            read_data()
+            d[-1] = 'Y'
+            write_csv(data_file, data, encoding=encoding)
+            break
     return record
 
 
 def str2int(s):
-    s = s.replace(',', '').split('.', 1)
+    s = str(s).replace(',', '').split('.', 1)
     if len(s) == 2:
         dot = s[-1]
         assert int(dot) == 0
@@ -242,15 +313,34 @@ def zero(s):
     return s
 
 
-def str2float(s):
-    s = str(s).replace(',', '').split('.', 1)
+def str2float(s, n=None):
+    s = str(s).replace(',', '')
+    number = s.split('.', 1)
+    if n:
+        f = float(s)
+        return round(f, n), n
+
     dot = '0'
-    if len(s) == 2:
-        dot = s[-1]
+    if len(number) == 2:
+        dot = number[-1]
         dot = zero(dot)
-    f = float(s[0] + '.' + dot)
+    f = float(number[0] + '.' + dot)
 
     return round(f, len(dot)), len(dot)
+
+
+def f(v, e, n=2):
+    '''
+    判断2个 float 数值是否相同，类型可以是 str 或 float 
+    v: 实际值，如：12.345, '1234.56', '1,234.5600' 
+    e: 预期结果, 示例值同 v
+    n: 小数点精确位数
+    '''
+    v = str(v).replace(',', '')
+    e = str(e).replace(',', '') 
+    _v = round(float(v), n)
+    _e = round(float(e), n)
+    assert round(_v, n) == round(_e, n)
 
 
 def mkdir(p):
@@ -260,6 +350,8 @@ def mkdir(p):
 
 
 def json2dict(s):
+    if isinstance(s, dict):
+        return s
     s = str(s)
     d = {}
     try:
@@ -274,34 +366,27 @@ def json2dict(s):
     return d
 
 
-def check(data, real):
-    if isinstance(data, str):
-        
-        if data.startswith('%s'):
-            data = data[2:]
-        elif data.startswith('%d'):
-            data = str2int(data[2:])
-        elif data.startswith('%f'):
-            data, p1 = str2float(data[2:])
-
-    logger.info('DATA:%s' % repr(data))
-    logger.info('REAL:%s' % repr(real))
-
+def compare(data, real):
     if isinstance(data, str):
 
         if data.startswith('#'):
             assert data[1:] != str(real)
-
+            return
+        elif data.startswith(':'):
+            exec('v=real;'+data[1:])
+            return
+                    
         assert isinstance(real, str)
 
         if data.startswith('*'):
             assert data[1:] in real
-
+            return
         elif data.startswith('^'):
             assert real.startswith(data[1:])
-
+            return
         elif data.startswith('$'):
             assert real.endswith(data[1:])
+            return
 
         elif data.startswith('\\'):
             data = data[1:]
@@ -311,13 +396,16 @@ def check(data, real):
     elif isinstance(data, int):
         assert isinstance(real, int)
         assert data == real
-
     elif isinstance(data, float):
-        assert absisinstance(real, float)
+        assert isinstance(real, float)
         data, p1 = str2float(data)
         real, p2 = str2float(real)
         p = min(p1, p2)
         assert round(data, p) == round(real, p)
-
     else:
         assert data == real
+
+
+def timestamp():
+    # js 格式的时间戳
+    return int(time.time() * 1000)

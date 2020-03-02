@@ -1,4 +1,4 @@
-from sweetest.utility import Excel, data2dict
+from sweetest.utility import Excel, data2dict, replace
 from sweetest.log import logger
 
 
@@ -48,13 +48,12 @@ class Elements:
         if self.elements.get(elem, ''):
             return self.elements[elem]['custom'], page + '-' + element
         else:
-            # 查不到就在通用里查,还是查不到就报错
+            # 查不到就在通用里查,还是查不到，可能是不在 element.xlsx 中定义的元素
             elem = '通用' + '-' + _el
             if self.elements.get(elem, ''):
                 return self.elements[elem]['custom'], '通用' + '-' + element
             else:
-                logger.warning('Page:%s element:%s is not exist' %
-                               (page, element))
+                logger.info('Page:%s element:%s' % (page, element))
                 return '', element
 
     def get(self, element, flag=False):
@@ -74,8 +73,9 @@ class Elements:
             return _el, element.split('#', 1)[-1]
         value = el['value']
         for v in _v:
+            v = '#' if v=='^' else v  # 当 value 中的 # 无需替换时，用例中的元素使用 ^ 表示
             value = value.replace('#', v, 1)
-        return el, value
+        return el, replace(value)
 
 
 e = Elements()

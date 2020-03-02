@@ -1,3 +1,4 @@
+
 web_keywords = {
     '打开': 'OPEN',
     'OPEN': 'OPEN',
@@ -11,8 +12,9 @@ web_keywords = {
     'CLICK': 'CLICK',
     '选择': 'SELECT',
     'SELECT': 'SELECT',
-    '移动到': 'MOVE',
-    'MOVE': 'MOVE',
+    '移动到': 'HOVER',
+    '悬停': 'HOVER',
+    'HOVER': 'HOVER',
     '右击': 'CONTEXT_CLICK',
     'CONTEXT_CLICK': 'CONTEXT_CLICK',
     '双击': 'DOUBLE_CLICK',
@@ -27,8 +29,10 @@ web_keywords = {
     'MESSAGE': 'MESSAGE',
     '上传文件': 'UPLOAD',
     'UPLOAD': 'UPLOAD',
-    '刷新': 'REFRESH',
-    'REFRESH': 'REFRESH'
+    '导航': 'NAVIGATE',
+    'NAVIGATE': 'NAVIGATE',
+    '滚动条': 'SCROLL',    
+    'SCROLL': 'SCROLL'
 }
 
 common_keywords = {
@@ -88,11 +92,71 @@ mobile_keywords = {
     '隐藏键盘': 'HIDE_KEYBOARD',  # iOS 专用
     'HIDE_KEYBOARD': 'HIDE_KEYBOARD',
     '命名标签页': 'TAB_NAME',
-    'TAB_NAME': 'TAB_NAME'
+    'TAB_NAME': 'TAB_NAME',
+    '重启': 'LAUNCH_APP',
+    'LAUNCH_APP': 'LAUNCH_APP',
+    '锁屏状态': 'IS_LOCKED',
+    'IS_LOCKED': 'IS_LOCKED',
+    '锁屏': 'LOCK',
+    'LOCK': 'LOCK',
+    '解锁': 'UNLOCK',
+    'UNLOCK': 'UNLOCK',         
+}
+
+windows_keywords = {
+    '检查': 'CHECK',
+    'CHECK': 'CHECK',    
+    '菜单': 'MENU_SELECT',
+    'MENU_SELECT': 'MENU_SELECT',
+    '选择': 'SELECT',
+    'SELECT': 'SELECT',
+    '点击': 'CLICK',
+    'CLICK': 'CLICK',
+    '双击': 'DOUBLE_CLICK',
+    'DOUBLE_CLICK': 'DOUBLE_CLICK',
+    '勾选': 'CHECK_OFF',
+    'CHECK_OFF': 'CHECK_OFF', 
+    '输入': 'INPUT',    
+    'INPUT': 'INPUT',
+    '填写': 'SET_TEXT',
+    'SET_TEXT': 'SET_TEXT',
+    '按键': 'SEND_KEYS',
+    'SEND_KEYS': 'SEND_KEYS',
+    '窗口': 'WINDOW',
+    'WINDOW': 'WINDOW'
+}
+
+files_keywords = {
+'复制': 'COPY',    
+'COPY': 'COPY',
+'移动': 'MOVE',
+'MOVE': 'MOVE',
+'删除文件': 'REMOVE',
+'REMOVE': 'REMOVE',
+'删除目录': 'RMDIR',
+'RMDIR': 'RMDIR',
+'创建目录': 'MKDIR',
+'MKDIR': 'MKDIR',
+'路径存在': 'EXISTS',
+'EXISTS': 'EXISTS',
+'路径不存在': 'NOT_EXISTS',
+'NOT_EXISTS': 'NOT_EXISTS',
+'是文件': 'IS_FILE',
+'IS_FILE': 'IS_FILE',
+'是目录': 'IS_DIR',
+'IS_DIR': 'IS_DIR',
+'不是文件': 'NOT_FILE',
+'NOT_FILE': 'NOT_FILE',
+'不是目录': 'NOT_DIR',
+'NOT_DIR': 'NOT_DIR',
+'命令行': 'COMMAND',
+'COMMAND': 'COMMAND',
+'SHELL': 'SHELL',
+'CMD': 'CMD'
 }
 
 all_keywords = {}
-for keywords in (web_keywords, common_keywords, http_keywords, mobile_keywords):
+for keywords in (web_keywords, common_keywords, http_keywords, mobile_keywords, windows_keywords, files_keywords):
     all_keywords = dict(all_keywords, **keywords)
 
 # 文件名后缀
@@ -128,5 +192,5 @@ header = {
     '备注': 'remark'
 }
 
-element_wait_timeout = 5  # 等待元素出现超时时间，单位：秒
+element_wait_timeout = 10  # 等待元素出现超时时间，单位：秒
 page_flash_timeout = 90  # 页面刷新超时时间，单位：秒

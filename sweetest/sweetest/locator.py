@@ -1,3 +1,4 @@
+from time import sleep
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -14,19 +15,48 @@ def locating_element(element, action=''):
         el, value = e.get(element)
     except:
         logger.exception(
-            'Locating the element:%s is Failure, no element in define' % element)
-        raise Exception('Locating the element:%s is Failure, no element in define' % element)
+            'Locating the element:%s is Failure, this element is not define' % element)
+        raise Exception(
+            'Locating the element:%s is Failure, this element is not define' % element)
+
+    if not isinstance(el, dict):
+        raise Exception(
+            'Locating the element:%s is Failure, this element is not define' % element)
 
     wait = WebDriverWait(g.driver, element_wait_timeout)
 
     if el['by'].lower() in ('title', 'url', 'current_url'):
         return None
-    elif action == 'CLICK':
-        el_location = wait.until(EC.element_to_be_clickable(
-            (getattr(By, el['by'].upper()), value)))
     else:
-        el_location = wait.until(EC.presence_of_element_located(
-            (getattr(By, el['by'].upper()), value)))
+        try:
+            el_location = wait.until(EC.presence_of_element_located(
+                (getattr(By, el['by'].upper()), value)))
+        except:
+            sleep(5)
+            try:
+                el_location = wait.until(EC.presence_of_element_located(
+                    (getattr(By, el['by'].upper()), value)))            
+            except :
+                raise Exception('Locating the element:%s is Failure: Timeout' % element)                
+    try:
+        if g.driver.name in ('chrome', 'safari'):
+            g.driver.execute_script(
+                "arguments[0].scrollIntoViewIfNeeded(true)", el_location)
+        else:
+            g.driver.execute_script(
+                "arguments[0].scrollIntoView(false)", el_location)
+    except:
+        pass
+
+    try:
+        if action == 'CLICK':
+            el_location = wait.until(EC.element_to_be_clickable(
+                (getattr(By, el['by'].upper()), value)))
+        else:
+            el_location = wait.until(EC.visibility_of_element_located(
+                (getattr(By, el['by'].upper()), value)))
+    except:
+        pass
 
     return el_location
 

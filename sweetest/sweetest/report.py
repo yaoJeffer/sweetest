@@ -1,207 +1,99 @@
-from datetime import datetime
-from xml.dom.minidom import Document
+import time
 
 
-class Report():
+def reporter(plan_data, testsuites_data, report_data, extra_data):
 
-    def __init__(self):
-        self.testsuites = []
+    extra_data['plan'] = plan_data['plan']
+    extra_data['task'] = int(time.time() * 1000)
 
-    def create_suite(self, name, hostname="localhost"):
-        suite = TestSuite(name, hostname)
-        self.testsuites.append(suite)
-        return suite
+    testcases = []
+    for key, ts in report_data.items():
+        count = {'result': 'success', 'total': 0,
+                 'success': 0, 'failure': 0, 'blocked': 0}
+        no = 1
+        for tc in ts:
+            tc['testsuite'] = key
+            tc['no'] = no
+            no += 1
+            tc = {**extra_data, **tc}
 
-    def finish(self):
-        for suite in self.testsuites:
-            if suite.open == True:
-                suite.finish()
+            res = tc['result'].lower()
+            if tc['condition'].lower() in ('base', 'setup', 'snippet'):
+                pass
+            elif res in count:
+                count[res] += 1
+                count['total'] += 1
+            testcases.append(tc)
+            if count['failure'] + count['blocked']:
+                count['result'] = 'failure'
+        testsuites_data[key] = {**count, **testsuites_data[key]}
 
-    def write(self, file):
-        self.finish()
-        doc = Document()
-        root = doc.createElement("testsuites")
-        doc.appendChild(root)
-        for suite in self.testsuites:
-            root.appendChild(suite.to_xml(doc))
-        file.write(doc.toprettyxml())
+    testsuite = []
+    count = {'total': 0, 'success': 0,
+             'failure': 0, 'blocked': 0}
+    result = 'success'
+    for key, ts in testsuites_data.items():
+        for k in count:
+            count[k] += ts[k]
+        if ts['result'] != 'success':
+            result = 'failure'
 
+        ts = {**extra_data, **ts}
+        ts['testsuite'] = key
+        testsuite.append(ts)
+    count['result'] = result
 
-    def data(self):
-        self.data = {}
-        for suite in self.testsuites:
-            s = self.data[suite.name+'-'+suite.hostname] = {}
-            s['project'] = suite.name
-            s['suite'] = suite.hostname
-            s['timestamp'] = suite.timestamp
-            s['tests'] = suite.tests
-            s['failures'] = suite.failures
-            s['errors'] = suite.errors
-            s['time'] = suite.time
+    plan = {**extra_data, **count, **plan_data}
 
-            cases = s['cases'] = []
-            for case in suite.cases:
-                c = {}
-                c['name'] = case.name
-                c['classname'] = case.classname
-                c['priority'] = case.priority
-                c['time'] = case.time
-                c['state'] = case.state
-                if case.state != "success":
-                    c['type'] = case.type
-                    c['message'] = case.message
-                else:
-                    c['type'] = ''
-                    c['message'] = ''
-                cases.append(c)
-
-        return self.data
+    return plan, testsuite, testcases
 
 
-class TestSuite():
-    def __init__(self, name, hostname):
-        self.properties = []
-        self.name = name
-        self.hostname = hostname
-        self.open = False
-        self.cases = []
-        self.systemout = None
-        self.systemerr = None
-
-    def start(self):
-        self.open = True
-        self.time = datetime.now()
-        self.timestamp = datetime.isoformat(self.time)
-        return self
-
-    def create_case(self, name, classname=""):
-        if self.open:
-            case = TestCase(name, classname)
-            self.cases.append(case)
-            return case
-        else:
-            raise Exception(
-                "This test suite cannot be modified in its current state")
-
-    def append_property(self, name, value):
-        self.properties.append([name, value])
-
-    def finish(self, output=None, error=None):
-        if self.open == True:
-            self.open = False
-            # set the number of test cases, error cases, failed cases, and the amount of time taken in seconds.
-            td = datetime.now() - self.time
-            self.time = float(
-                (td.microseconds + (td.seconds + td.days * 24 * 3600) * 10**6)) / 10**6
-            self.errors = 0
-            self.high_errors = 0
-            self.medium_errors = 0
-            self.low_errors = 0
-            self.failures = 0
-            self.high_failures = 0
-            self.medium_failures = 0
-            self.low_failures = 0
-            for case in self.cases:
-                if case.state == None:
-                    case.error(
-                        "XmlUnit Finished", "The test was forced to finish since the suite was finished.")
-                status = case.state.lower()
-                if status == "failure":
-                    self.failures += 1
-                    if case.priority == 'H':
-                        self.high_failures += 1
-                    if case.priority == 'M':
-                        self.medium_failures += 1
-                    if case.priority == 'L':
-                        self.low_failures += 1
-                elif status == "error":
-                    self.errors += 1
-                    if case.priority == 'H':
-                        self.high_errors += 1
-                    if case.priority == 'M':
-                        self.medium_errors += 1
-                    if case.priority == 'L':
-                        self.low_errors += 1
-                else:
-                    pass
-            self.tests = len(self.cases)
-            self.output = output
-            self.error = error
-            return None
-        else:
-            raise Exception("This test suite is already finished.")
-
-    def to_xml(self, doc):
-        node = doc.createElement("testsuite")
-        node.setAttribute("name", self.name)
-        node.setAttribute("hostname", self.hostname)
-        node.setAttribute("timestamp", self.timestamp)
-        node.setAttribute("tests", "%s" % self.tests)
-        node.setAttribute("failures", "%s" % self.failures)
-        node.setAttribute("failures_detail", "H:%s M:%s L:%s" % (
-            self.high_failures, self.medium_failures, self.low_failures))
-        node.setAttribute("errors", "%s" % self.errors)
-        node.setAttribute("errors_detail", "H:%s M:%s L:%s" % (
-            self.high_errors, self.medium_errors, self.low_errors))
-        node.setAttribute("time", "%s" % self.time)
-        for case in self.cases:
-            node.appendChild(case.to_xml(doc))
-
-        return node
+def local_time(timestamp):
+    import time
+    t = time.localtime(int(timestamp / 1000))
+    return str(time.strftime("%Y/%m/%d %H:%M:%S", t))
 
 
-class TestCase():
+def cost_time(start, end):
+    return int((end - start) / 1000)
 
-    def __init__(self, name, classname):
-        self.state = None
-        self.name = name
-        self.classname = classname
-        self.priority = 'M'
-        return None
 
-    def start(self):
-        self.time = datetime.now()
-        return self
+def summary(plan_data, testsuites_data, report_data, extra_data):
+    plan, testsuites, testcases = reporter(
+        plan_data, testsuites_data, report_data, extra_data)
 
-    def custom(self, state, type, message):
-        if self.state != None:
-            raise Exception("This test case is already finished.")
-        self.state = state
-        self.message = message
-        self.type = type
-        td = datetime.now() - self.time
-        self.time = float(
-            (td.microseconds + (td.seconds + td.days * 24 * 3600) * 10**6)) / 10**6
+    data = [['测试套件', '用例总数', '成功', '阻塞', '失败', '测试结果', '开始时间', '结束时间', '耗时(秒)']]
+    failures = [['测试套件', '用例编号', '用例标题', '用例结果', '失败步骤', '备注']]
 
-    def fail(self, type, message):
-        self.custom("failure", type, message)
+    for suite in testsuites:
+        row = [suite['testsuite'], suite['total'], suite['success'], suite['blocked'], suite['failure'],
+               suite['result'], local_time(suite['start_timestamp']), local_time(suite['end_timestamp']),
+               cost_time(suite['start_timestamp'], suite['end_timestamp'])]
+        data.append(row)
 
-    def skip(self, type, message):
-        self.custom("skipped", type, message)
+    flag = False
+    for case in testcases:
+        suite_name = '' if flag else case['testsuite']
+        row = []
+        if case['result'] == 'blocked':
+            row = [suite_name, case['id'], case['title'], case['result']]
+        elif case['result'] == 'failure':
+            for step in case['steps']:
+                if step['score'] == 'NO':
+                    desc = '|'.join([step[k] for k in ('no', 'keyword', 'page', 'element')])
+                    row = [suite_name, case['id'], case['title'], case['result'], desc, step['remark']]
+                    break
+        if row:
+            flag = True
+            failures.append(row)
 
-    def error(self, type, message):
-        self.custom("error", type, message)
+    data.append(['--------'])
+    total = ['总计', plan['total'], plan['success'], plan['blocked'], plan['failure'],
+             plan['result'], local_time(plan['start_timestamp']), local_time(plan['end_timestamp']),
+             cost_time(plan['start_timestamp'], plan['end_timestamp'])]
 
-    def block(self, type, message):
-        self.custom("blocked", type, message)
-
-    def succeed(self):
-        if self.state != None:
-            raise Exception("This test case is already finished.")
-        self.state = "success"
-        td = datetime.now() - self.time
-        self.time = float(
-            (td.microseconds + (td.seconds + td.days * 24 * 3600) * 10**6)) / 10**6
-
-    def to_xml(self, doc):
-        node = doc.createElement("testcase")
-        node.setAttribute("name", self.name)
-        node.setAttribute("classname", self.classname)
-        node.setAttribute("priority", self.priority)
-        node.setAttribute("time", "%s" % self.time)
-        if self.state != "success":
-            subnode = doc.createElement(self.state)
-            subnode.setAttribute("type", self.type)
-            subnode.setAttribute("message", self.message)
-            node.appendChild(subnode)
-        return node
+    data.append(total)
+    if len(failures) > 1:
+        data.append(['********'])
+        data += failures
+    return data
